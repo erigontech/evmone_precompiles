@@ -19,6 +19,19 @@ int evmone_capi_ec_add(
     const unsigned char* x_in,
     const unsigned char* y_in);
 
+// evmone_capi_ec_mul performs scalar multiplication on the elliptic curve alt_bn128.
+// See EIP-196: Precompiled contracts for addition and scalar multiplication on the elliptic curve alt_bn128.
+//
+// Returns: 1: multiplication was successful
+//          0: multiplication was not successful (the input point was invalid)
+// Args:
+//  Out:    out:  the serialized 64-byte resulting curve point (cannot be NULL)
+//  In:     x_in: pointer to a serialized 64-byte curve point (cannot be NULL)
+//          s_in: pointer to a 32-byte scalar (cannot be NULL)
+int evmone_capi_ec_mul(unsigned char* out,
+                       const unsigned char* x_in,
+                       const unsigned char* s_in);
+
 #ifdef __cplusplus
 }
 #endif

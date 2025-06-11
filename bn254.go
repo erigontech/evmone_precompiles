@@ -18,6 +18,7 @@ import "unsafe"
 
 // EcAdd performs point addition on the elliptic curve alt_bn128.
 // See EIP-196: Precompiled contracts for addition and scalar multiplication on the elliptic curve alt_bn128.
+// out is set to x + y.
 // Return true if the addition was successful an false otherwise (an input point was invalid).
 func EcAdd(out *[64]byte, x *[64]byte, y *[64]byte) bool {
 	outData := (*C.uchar)(unsafe.Pointer(&out[0]))
@@ -25,4 +26,16 @@ func EcAdd(out *[64]byte, x *[64]byte, y *[64]byte) bool {
 	yData := (*C.uchar)(unsafe.Pointer(&y[0]))
 
 	return C.evmone_capi_ec_add(outData, xData, yData) != 0
+}
+
+// EcMul performs scalar multiplication on the elliptic curve alt_bn128.
+// See EIP-196: Precompiled contracts for addition and scalar multiplication on the elliptic curve alt_bn128.
+// out is set to s * x.
+// Return true if the multiplication was successful an false otherwise (the input point was invalid).
+func EcMul(out *[64]byte, x *[64]byte, s *[32]byte) bool {
+	outData := (*C.uchar)(unsafe.Pointer(&out[0]))
+	xData := (*C.uchar)(unsafe.Pointer(&x[0]))
+	sData := (*C.uchar)(unsafe.Pointer(&s[0]))
+
+	return C.evmone_capi_ec_mul(outData, xData, sData) != 0
 }
