@@ -16,6 +16,9 @@ import "C"
 
 import "unsafe"
 
+// EcAdd performs point addition on the elliptic curve alt_bn128.
+// See EIP-196: Precompiled contracts for addition and scalar multiplication on the elliptic curve alt_bn128.
+// Return true if the addition was successful an false otherwise (an input point was invalid).
 func EcAdd(out *[64]byte, p *[64]byte, q *[64]byte) bool {
 	outData := (*C.uchar)(unsafe.Pointer(&out[0]))
 	pData := (*C.uchar)(unsafe.Pointer(&p[0]))
