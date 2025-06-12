@@ -10,6 +10,11 @@ package evmone
 #cgo CXXFLAGS: -I./evmone/include
 #cgo CXXFLAGS: -I./evmone/lib/evmone_precompiles
 
+#cgo noescape evmone_capi_ec_add
+#cgo nocallback evmone_capi_ec_add
+#cgo noescape evmone_capi_ec_mul
+#cgo nocallback evmone_capi_ec_mul
+
 #include "capi.h"
 */
 import "C"
