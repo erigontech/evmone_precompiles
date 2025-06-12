@@ -16,10 +16,13 @@ import "C"
 
 import "unsafe"
 
-func EcAdd(out *[64]byte, p *[64]byte, q *[64]byte) bool {
+// EcAdd performs point addition on the elliptic curve alt_bn128.
+// See EIP-196: Precompiled contracts for addition and scalar multiplication on the elliptic curve alt_bn128.
+// Return true if the addition was successful an false otherwise (an input point was invalid).
+func EcAdd(out *[64]byte, x *[64]byte, y *[64]byte) bool {
 	outData := (*C.uchar)(unsafe.Pointer(&out[0]))
-	pData := (*C.uchar)(unsafe.Pointer(&p[0]))
-	qData := (*C.uchar)(unsafe.Pointer(&q[0]))
+	xData := (*C.uchar)(unsafe.Pointer(&x[0]))
+	yData := (*C.uchar)(unsafe.Pointer(&y[0]))
 
-	return C.evmone_capi_ec_add(outData, pData, qData) != 0
+	return C.evmone_capi_ec_add(outData, xData, yData) != 0
 }
