@@ -10,7 +10,7 @@ package evmone
 #cgo CXXFLAGS: -I./evmone/include
 #cgo CXXFLAGS: -I./evmone/lib/evmone_precompiles
 #cgo CXXFLAGS: -I./evmone/test/state
-#cgo LDFLAGS: -lgmp
+#cgo LDFLAGS: -l:libgmp.a
 
 // These don't help with anything:
 #cgo noescape evmone_modexp
