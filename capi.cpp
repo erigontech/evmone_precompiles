@@ -23,3 +23,16 @@ int evmone_capi_ec_add(
     intx::be::unsafe::store(out + 32, res.y);
     return 1;
 }
+
+void modexp(
+    const uint8_t* input, size_t input_size, uint8_t* output, size_t output_size) noexcept;
+
+void evmone_modexp(
+    const uint8_t* input,
+    size_t input_size,
+    uint8_t* output,
+    size_t output_size
+)
+{
+    modexp(input, input_size, output, output_size);
+}

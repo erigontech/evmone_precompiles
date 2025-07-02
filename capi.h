@@ -1,6 +1,9 @@
 // Copyright 2025 Erigon Technologies AG.
 // SPDX-License-Identifier: Apache-2.0
 
+#include <stdint.h>
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -18,6 +21,13 @@ int evmone_capi_ec_add(
     unsigned char* out,
     const unsigned char* x_in,
     const unsigned char* y_in);
+
+void evmone_modexp(
+    const uint8_t* input,
+    size_t input_size,
+    uint8_t* output,
+    size_t output_size
+);
 
 #ifdef __cplusplus
 }
