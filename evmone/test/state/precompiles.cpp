@@ -9,6 +9,7 @@
 #include <evmone_precompiles/bls.hpp>
 #include <evmone_precompiles/bn254.hpp>
 #include <evmone_precompiles/kzg.hpp>
+#include <evmone_precompiles/modexp.hpp>
 #include <evmone_precompiles/ripemd160.hpp>
 #include <evmone_precompiles/secp256k1.hpp>
 #include <evmone_precompiles/sha256.hpp>
@@ -348,15 +349,17 @@ ExecutionResult expmod_execute(
     const auto exp_len = intx::be::unsafe::load<uint32_t>(&input[LEN_SIZE + LEN32_OFF]);
     assert(intx::be::unsafe::load<uint32_t>(&input[2 * LEN_SIZE + LEN32_OFF]) == mod_len);
 
-    const bytes_view payload{input + HEADER_SIZE, input_size - HEADER_SIZE};
     const size_t mod_off = base_len + exp_len;  // Cannot overflow if gas cost computed before.
-    const auto mod_explicit = payload.substr(std::min(mod_off, payload.size()), mod_len);
+    const size_t payload_max_size = mod_off + mod_len;  // Input may contain extra bytes.
+    const std::span payload{
+        input + HEADER_SIZE, std::min(input_size - HEADER_SIZE, payload_max_size)};
+    const auto mod_explicit = payload.subspan(std::min(mod_off, payload.size()));
 
     // Handle the mod being zero early.
     // This serves two purposes:
-    // - bigint libraries don't like zero modulus because division by 0 is not well-defined,
+    // - bigint libraries don't like such a modulus because division by 0 is not well-defined,
     // - having non-zero modulus guarantees that base and exp aren't out-of-bounds.
-    if (mod_explicit.find_first_not_of(uint8_t{0}) == bytes_view::npos) [[unlikely]]
+    if (std::ranges::all_of(mod_explicit, [](uint8_t b) { return b == 0; })) [[unlikely]]
     {
         // The modulus is zero, so the result is zero.
         std::fill_n(output, output_size, 0);
@@ -366,16 +369,22 @@ ExecutionResult expmod_execute(
     const auto mod_requires_padding = mod_explicit.size() != mod_len;
     if (mod_requires_padding) [[unlikely]]
     {
-        // The modulus is the last argument and some of its bytes may be missing and be implicitly
+        // The modulus is the last argument, and some of its bytes may be missing and be implicitly
         // zero. In this case, copy the explicit modulus bytes to the output buffer and pad the rest
         // with zeroes. The output buffer is guaranteed to have exactly the modulus size.
         const auto [_, output_p] = std::ranges::copy(mod_explicit, output);
         std::fill(output_p, output + output_size, 0);
     }
 
-    const auto base = payload.substr(0, base_len);
-    const auto exp = payload.substr(base_len, exp_len);
-    const auto mod = mod_requires_padding ? bytes_view{output, mod_len} : mod_explicit;
+    const auto base = payload.subspan(0, base_len);
+    const auto exp = payload.subspan(base_len, exp_len);
+    const auto mod = mod_requires_padding ? std::span{output, mod_len} : mod_explicit;
+
+    if (std::max(base.size(), mod.size()) <= MODEXP_LEN_LIMIT_EIP7823)
+    {
+        crypto::modexp(base, exp, mod, output);
+        return {EVMC_SUCCESS, mod_len};
+    }
 
 #ifdef EVMONE_PRECOMPILES_GMP
     expmod_gmp(base, exp, mod, output);
