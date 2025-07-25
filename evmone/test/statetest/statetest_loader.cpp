@@ -257,8 +257,11 @@ state::BlockInfo from_json_with_rev(const json::json& j, evmc_revision rev)
     {
         const auto parent_excess_blob_gas = from_json<uint64_t>(*it);
         const auto parent_blob_gas_used = from_json<uint64_t>(j.at("parentBlobGasUsed"));
-        excess_blob_gas =
-            state::calc_excess_blob_gas(rev, parent_blob_gas_used, parent_excess_blob_gas);
+        const auto parent_base_fee = from_json<uint64_t>(j.at("parentBaseFee"));
+        const auto parent_blob_base_fee =
+            state::compute_blob_gas_price(rev, parent_excess_blob_gas);
+        excess_blob_gas = state::calc_excess_blob_gas(rev, parent_blob_gas_used,
+            parent_excess_blob_gas, parent_base_fee, parent_blob_base_fee);
     }
     else if (const auto it2 = j.find("currentExcessBlobGas"); it2 != j.end())
     {
@@ -469,7 +472,7 @@ static void from_json(const json::json& j_t, StateTransitionTest& o)
     if (const auto info_it = j_t.find("_info"); info_it != j_t.end())
     {
         // Parse input labels to improve test readability.
-        // EEST don't use labels so exclude this code from coverage
+        // EEST doesn't use labels, so exclude this code from coverage
         // to help with ethereum/tests -> EEST conversion.
         // LCOV_EXCL_START
         if (const auto labels_it = info_it->find("labels"); labels_it != info_it->end())
@@ -482,10 +485,9 @@ static void from_json(const json::json& j_t, StateTransitionTest& o)
 
     for (const auto& [rev_name, expectations] : j_t.at("post").items())
     {
-        // TODO(c++20): Use emplace_back with aggregate initialization.
-        o.cases.push_back({to_rev(rev_name),
+        o.cases.emplace_back(to_rev(rev_name),
             expectations.get<std::vector<StateTransitionTest::Case::Expectation>>(),
-            from_json_with_rev(j_t.at("env"), to_rev(rev_name))});
+            from_json_with_rev(j_t.at("env"), to_rev(rev_name)));
     }
 }
 

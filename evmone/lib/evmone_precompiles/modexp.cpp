@@ -35,21 +35,24 @@ constexpr unsigned ctz(const intx::uint<N>& x) noexcept
 }
 
 template <typename UIntT>
-UIntT modexp_odd(const UIntT& base, std::span<const uint8_t> exp, const UIntT& mod) noexcept
+UIntT modexp_odd(
+    const UIntT& base, std::span<const uint8_t> exp, size_t exp_bits, const UIntT& mod) noexcept
 {
     const evmmax::ModArith<UIntT> arith{mod};
     const auto base_mont = arith.to_mont(base);
 
+    const auto exp_size = (exp_bits + 7) / 8;
     auto ret = arith.to_mont(1);
-    for (const auto e : exp)
+    for (auto g = exp_bits; g != 0; --g)
     {
-        for (size_t i = 8; i != 0; --i)
-        {
-            ret = arith.mul(ret, ret);
-            const auto bit = (e >> (i - 1)) & 1;
-            if (bit != 0)
-                ret = arith.mul(ret, base_mont);
-        }
+        ret = arith.mul(ret, ret);
+
+        const auto w = (g - 1) / 8;
+        const auto e = exp[exp_size - 1 - w];
+        const auto i = (g - 1) % 8;
+        const auto bit = (e >> i) & 1;
+        if (bit != 0)
+            ret = arith.mul(ret, base_mont);
     }
 
     return arith.from_mont(ret);
@@ -81,7 +84,7 @@ template <typename UIntT>
 UIntT modinv_pow2(const UIntT& x, unsigned k) noexcept
 {
     UIntT b = 1;
-    UIntT res;
+    UIntT res{};
     for (size_t i = 0; i < k; ++i)
     {
         const auto t = b & 1;
@@ -102,7 +105,7 @@ UIntT load(std::span<const uint8_t> data) noexcept
 }
 
 template <size_t Size>
-void modexp_impl(std::span<const uint8_t> base_bytes, std::span<const uint8_t> exp,
+void modexp_impl(std::span<const uint8_t> base_bytes, std::span<const uint8_t> exp, size_t exp_bits,
     std::span<const uint8_t> mod_bytes, uint8_t* output) noexcept
 {
     using UIntT = intx::uint<Size * 8>;
@@ -112,7 +115,7 @@ void modexp_impl(std::span<const uint8_t> base_bytes, std::span<const uint8_t> e
     UIntT result;
     if (const auto mod_tz = ctz(mod); mod_tz == 0)  // is odd
     {
-        result = modexp_odd(base, exp, mod);
+        result = modexp_odd(base, exp, exp_bits, mod);
     }
     else if (const auto mod_odd = mod >> mod_tz; mod_odd == 1)  // is power of 2
     {
@@ -120,7 +123,7 @@ void modexp_impl(std::span<const uint8_t> base_bytes, std::span<const uint8_t> e
     }
     else  // is even
     {
-        const auto x1 = modexp_odd(base, exp, mod_odd);
+        const auto x1 = modexp_odd(base, exp, exp_bits, mod_odd);
         const auto x2 = modexp_pow2(base, exp, mod_tz);
 
         const auto mod_odd_inv = modinv_pow2(mod_odd, mod_tz);
@@ -130,6 +133,44 @@ void modexp_impl(std::span<const uint8_t> base_bytes, std::span<const uint8_t> e
     }
 
     trunc(std::span{output, mod_bytes.size()}, result);
+}
+
+template <>
+void modexp_impl<8>(std::span<const uint8_t> base_bytes, std::span<const uint8_t> exp,
+    size_t exp_bits, std::span<const uint8_t> mod_bytes, uint8_t* output) noexcept
+{
+    using UIntT = uint64_t;
+    const auto base = load<UIntT>(base_bytes);
+    const auto mod = load<UIntT>(mod_bytes);
+
+    UIntT result = 0;
+    if (const auto mod_tz = static_cast<unsigned>(std::countr_zero(mod)); mod_tz == 0)  // is odd
+    {
+        result = modexp_odd(base, exp, exp_bits, mod);
+    }
+    else if (const auto mod_odd = mod >> mod_tz; mod_odd == 1)  // is power of 2
+    {
+        result = modexp_pow2(base, exp, mod_tz);
+    }
+    else  // is even
+    {
+        const auto x1 = modexp_odd(base, exp, exp_bits, mod_odd);
+        const auto x2 = modexp_pow2(base, exp, mod_tz);
+
+        const auto mod_odd_inv = modinv_pow2(mod_odd, mod_tz);
+
+        const auto mod_pow2_mask = (UIntT{1} << mod_tz) - 1;
+        result = x1 + (((x2 - x1) * mod_odd_inv) & mod_pow2_mask) * mod_odd;
+    }
+
+    auto be = to_big_endian(result);
+    std::memcpy(output, &as_bytes(be)[sizeof(be) - mod_bytes.size()], mod_bytes.size());
+}
+
+template <size_t... N>
+consteval auto make_table(std::index_sequence<N...>) noexcept
+{
+    return std::array{modexp_impl<(N + 1) * 8>...};
 }
 }  // namespace
 
@@ -144,18 +185,19 @@ void modexp(std::span<const uint8_t> base, std::span<const uint8_t> exp,
 
     const auto it = std::ranges::find_if(exp, [](auto x) { return x != 0; });
     exp = std::span{it, exp.end()};
+    const auto exp_bits =
+        exp.empty() ? 0 : static_cast<size_t>(std::bit_width(exp[0])) + (exp.size() - 1) * 8;
 
-    if (const auto size = std::max(mod.size(), base.size()); size <= 16)
-        modexp_impl<16>(base, exp, mod, output);
-    else if (size <= 32)
-        modexp_impl<32>(base, exp, mod, output);
-    else if (size <= 64)
-        modexp_impl<64>(base, exp, mod, output);
-    else if (size <= 128)
-        modexp_impl<128>(base, exp, mod, output);
-    else if (size <= 256)
-        modexp_impl<256>(base, exp, mod, output);
+    const auto size = std::max(mod.size(), base.size());
+    assert(size != 0);
+
+    static constexpr size_t N = 128 / 8;
+    if (size <= N * 8)
+    {
+        static constexpr auto table = make_table(std::make_index_sequence<N>{});
+        table[(size + 7) / 8 - 1](base, exp, exp_bits, mod, output);
+    }
     else
-        modexp_impl<MAX_INPUT_SIZE>(base, exp, mod, output);
+        modexp_impl<MAX_INPUT_SIZE>(base, exp, exp_bits, mod, output);
 }
 }  // namespace evmone::crypto

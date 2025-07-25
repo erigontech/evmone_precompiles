@@ -1161,7 +1161,8 @@ TEST_F(state_transition, txcreate_from_blob_tx)
 
     tx.to = To;
     tx.max_blob_gas_price = *block.blob_base_fee;
-    pre.get(tx.sender).balance = 0x20000 * tx.max_blob_gas_price + tx.gas_limit * tx.max_gas_price;
+    pre.get(tx.sender).balance =
+        GAS_PER_BLOB * tx.max_blob_gas_price + tx.gas_limit * tx.max_gas_price;
     pre.insert(*tx.to, {.nonce = 1, .code = factory_container});
 
     expect.post[tx.sender].nonce = pre.get(tx.sender).nonce + 1;
@@ -1173,7 +1174,7 @@ TEST_F(state_transition, txcreate_from_blob_tx)
 TEST_F(state_transition, txcreate_loop_valid)
 {
     rev = EVMC_EXPERIMENTAL;
-    block.gas_limit = 30'000'000;
+    block.gas_limit = MAX_TX_GAS_LIMIT;
     tx.gas_limit = block.gas_limit;
     pre.get(tx.sender).balance = tx.gas_limit * tx.max_gas_price + tx.value + 1;
 
@@ -1185,7 +1186,7 @@ TEST_F(state_transition, txcreate_loop_valid)
     tx.type = Transaction::Type::initcodes;
     tx.initcodes.push_back(init_container);
 
-    constexpr auto iterations = 800;
+    constexpr auto iterations = 400;
     const auto initcode_hash = keccak256(init_container);
     const auto factory_code =
         push0() +                                             // initial salt
@@ -1210,7 +1211,7 @@ TEST_F(state_transition, txcreate_loop_valid)
 TEST_F(state_transition, txcreate_loop_invalid)
 {
     rev = EVMC_EXPERIMENTAL;
-    block.gas_limit = 30'000'000;
+    block.gas_limit = MAX_TX_GAS_LIMIT;
     tx.gas_limit = block.gas_limit;
     pre.get(tx.sender).balance = tx.gas_limit * tx.max_gas_price + tx.value + 1;
 
@@ -1219,7 +1220,7 @@ TEST_F(state_transition, txcreate_loop_invalid)
     tx.type = Transaction::Type::initcodes;
     tx.initcodes.push_back(init_container);
 
-    constexpr auto iterations = 900;
+    constexpr auto iterations = 500;
     const auto initcode_hash = keccak256(init_container);
     const auto factory_code =
         push0() +                                             // initial salt
@@ -2346,7 +2347,8 @@ TEST_F(state_transition, legacy_txcreate_from_blob_tx)
 
     tx.to = To;
     tx.max_blob_gas_price = *block.blob_base_fee;
-    pre.get(tx.sender).balance = 0x20000 * tx.max_blob_gas_price + tx.gas_limit * tx.max_gas_price;
+    pre.get(tx.sender).balance =
+        GAS_PER_BLOB * tx.max_blob_gas_price + tx.gas_limit * tx.max_gas_price;
     pre.insert(*tx.to, {.nonce = 1, .code = factory_code});
 
     expect.post[tx.sender].nonce = pre.get(tx.sender).nonce + 1;
@@ -2358,7 +2360,7 @@ TEST_F(state_transition, legacy_txcreate_from_blob_tx)
 TEST_F(state_transition, legacy_txcreate_loop_valid)
 {
     rev = EVMC_EXPERIMENTAL;
-    block.gas_limit = 30'000'000;
+    block.gas_limit = MAX_TX_GAS_LIMIT;
     tx.gas_limit = block.gas_limit;
     pre.get(tx.sender).balance = tx.gas_limit * tx.max_gas_price + tx.value + 1;
 
@@ -2370,7 +2372,7 @@ TEST_F(state_transition, legacy_txcreate_loop_valid)
     tx.type = Transaction::Type::initcodes;
     tx.initcodes.push_back(init_container);
 
-    constexpr auto iterations = 800;
+    constexpr auto iterations = 400;
     const auto initcode_hash = keccak256(init_container);
     const auto factory_code =
         push0() +                                            // initial salt
@@ -2394,7 +2396,7 @@ TEST_F(state_transition, legacy_txcreate_loop_valid)
 TEST_F(state_transition, legacy_txcreate_loop_invalid)
 {
     rev = EVMC_EXPERIMENTAL;
-    block.gas_limit = 30'000'000;
+    block.gas_limit = MAX_TX_GAS_LIMIT;
     tx.gas_limit = block.gas_limit;
     pre.get(tx.sender).balance = tx.gas_limit * tx.max_gas_price + tx.value + 1;
 
@@ -2403,7 +2405,7 @@ TEST_F(state_transition, legacy_txcreate_loop_invalid)
     tx.type = Transaction::Type::initcodes;
     tx.initcodes.push_back(init_container);
 
-    constexpr auto iterations = 900;
+    constexpr auto iterations = 500;
     const auto initcode_hash = keccak256(init_container);
     const auto factory_code =
         push0() +                                             // initial salt

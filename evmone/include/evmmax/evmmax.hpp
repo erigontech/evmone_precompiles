@@ -42,8 +42,9 @@ private:
     {
         // R is 2^num_bits, R² is 2^(2*num_bits) and needs 2*num_bits+1 bits to represent,
         // rounded to 2*num_bits+64) for intx requirements.
-        constexpr auto r2 = intx::uint<UintT::num_bits * 2 + 64>{1} << (UintT::num_bits * 2);
-        return intx::udivrem(r2, mod).rem;
+        constexpr auto r2 = intx::uint<sizeof(UintT) * 8 * 2 + 64>{1} << (sizeof(UintT) * 8 * 2);
+        using XT = std::conditional_t<std::is_same_v<UintT, uint64_t>, intx::uint128, UintT>;
+        return static_cast<UintT>(intx::udivrem(r2, XT{mod}).rem);
     }
 
     static constexpr std::pair<uint64_t, uint64_t> addmul(
@@ -57,7 +58,7 @@ public:
     constexpr explicit ModArith(const UintT& modulus) noexcept
       : mod{modulus},
         m_r_squared{compute_r_squared(modulus)},
-        m_mod_inv{compute_mod_inv(modulus[0])}
+        m_mod_inv{compute_mod_inv(static_cast<uint64_t>(modulus))}
     {}
 
     /// Converts a value to Montgomery form.
@@ -84,27 +85,45 @@ public:
         // High-Speed Algorithms & Architectures For Number-Theoretic Cryptosystems
         // https://www.microsoft.com/en-us/research/wp-content/uploads/1998/06/97Acar.pdf
 
-        constexpr auto S = UintT::num_words;  // TODO(C++23): Make it static
+        constexpr auto S = sizeof(UintT) / 8;  // TODO(C++23): Make it static
 
-        intx::uint<UintT::num_bits + 64> t;
-        for (size_t i = 0; i != S; ++i)
+        intx::uint<sizeof(UintT) * 8 + 64> t;
+
+        if constexpr (S == 1)
         {
             uint64_t c = 0;
-#pragma GCC unroll 8
-            for (size_t j = 0; j != S; ++j)
-                std::tie(c, t[j]) = addmul(t[j], x[j], y[i], c);
+            std::tie(c, t[0]) = addmul(t[0], x, y, c);
             auto tmp = intx::addc(t[S], c);
             t[S] = tmp.value;
             const auto d = tmp.carry;  // TODO: Carry is 0 for sparse modulus.
 
             const auto m = t[0] * m_mod_inv;
-            std::tie(c, std::ignore) = addmul(t[0], m, mod[0], 0);
-#pragma GCC unroll 8
-            for (size_t j = 1; j != S; ++j)
-                std::tie(c, t[j - 1]) = addmul(t[j], m, mod[j], c);
+            std::tie(c, std::ignore) = addmul(t[0], m, mod, 0);
             tmp = intx::addc(t[S], c);
             t[S - 1] = tmp.value;
             t[S] = d + tmp.carry;  // TODO: Carry is 0 for sparse modulus.
+        }
+        else
+        {
+            for (size_t i = 0; i != S; ++i)
+            {
+                uint64_t c = 0;
+#pragma GCC unroll 8
+                for (size_t j = 0; j != S; ++j)
+                    std::tie(c, t[j]) = addmul(t[j], x[j], y[i], c);
+                auto tmp = intx::addc(t[S], c);
+                t[S] = tmp.value;
+                const auto d = tmp.carry;  // TODO: Carry is 0 for sparse modulus.
+
+                const auto m = t[0] * m_mod_inv;
+                std::tie(c, std::ignore) = addmul(t[0], m, mod[0], 0);
+#pragma GCC unroll 8
+                for (size_t j = 1; j != S; ++j)
+                    std::tie(c, t[j - 1]) = addmul(t[j], m, mod[j], c);
+                tmp = intx::addc(t[S], c);
+                t[S - 1] = tmp.value;
+                t[S] = d + tmp.carry;  // TODO: Carry is 0 for sparse modulus.
+            }
         }
 
         if (t >= mod)

@@ -439,6 +439,8 @@ std::variant<TransactionProperties, std::error_code> validate_transaction(
             return make_error_code(CREATE_BLOB_TX);
         if (tx.blob_hashes.empty())
             return make_error_code(EMPTY_BLOB_HASHES_LIST);
+        if (rev >= EVMC_OSAKA && tx.blob_hashes.size() > MAX_TX_BLOB_COUNT)
+            return make_error_code(BLOB_GAS_LIMIT_EXCEEDED);
 
         assert(block.blob_base_fee.has_value());
         if (tx.max_blob_gas_price < *block.blob_base_fee)
@@ -498,6 +500,9 @@ std::variant<TransactionProperties, std::error_code> validate_transaction(
     }
 
     assert(tx.max_priority_gas_price <= tx.max_gas_price);
+
+    if (rev >= EVMC_OSAKA && tx.gas_limit > MAX_TX_GAS_LIMIT)
+        return make_error_code(MAX_GAS_LIMIT_EXCEEDED);
 
     if (tx.gas_limit > block_gas_left)
         return make_error_code(GAS_LIMIT_REACHED);

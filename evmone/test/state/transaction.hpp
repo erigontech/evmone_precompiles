@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "blob_schedule.hpp"
 #include "bloom_filter.hpp"
 #include "state_diff.hpp"
 #include <intx/intx.hpp>
@@ -12,6 +13,9 @@
 
 namespace evmone::state
 {
+/// The maximum allowed gas limit for a transaction (EIP-7825).
+constexpr auto MAX_TX_GAS_LIMIT = 0x1000000;  // 2**24
+
 using AccessList = std::vector<std::pair<address, std::vector<bytes32>>>;
 
 struct Authorization
@@ -61,11 +65,7 @@ struct Transaction
     };
 
     /// Returns amount of blob gas used by this transaction
-    [[nodiscard]] uint64_t blob_gas_used() const
-    {
-        static constexpr auto GAS_PER_BLOB = 0x20000;
-        return GAS_PER_BLOB * blob_hashes.size();
-    }
+    [[nodiscard]] uint64_t blob_gas_used() const { return GAS_PER_BLOB * blob_hashes.size(); }
 
     Type type = Type::legacy;
     bytes data;
