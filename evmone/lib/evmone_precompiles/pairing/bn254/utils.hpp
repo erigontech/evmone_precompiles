@@ -9,13 +9,13 @@ namespace evmmax::bn254
 {
 consteval Fq2 make_fq2(const uint256& a, const uint256& b) noexcept
 {
-    return Fq2({Fq::from_int(a), Fq::from_int(b)});
+    return Fq2({Fq(a), Fq(b)});
 }
 
 /// Defines coefficients needed for fast Frobenius endomorphism computation.
 /// For more ref see https://eprint.iacr.org/2010/354.pdf 3.2 Frobenius Operator.
 /// TODO: Make it constexpr.
-static inline std::array<std::array<Fq2, 5>, 3> FROBENIUS_COEFFS = {
+static inline const std::array<std::array<Fq2, 5>, 3> FROBENIUS_COEFFS = {
     {
         {
             make_fq2(
@@ -70,14 +70,14 @@ static inline std::array<std::array<Fq2, 5>, 3> FROBENIUS_COEFFS = {
 /// Verifies that value is in the proper prime field.
 constexpr bool is_field_element(const uint256& v)
 {
-    return v < FieldPrime;
+    return v < Curve::FIELD_PRIME;
 }
 
 /// Verifies that affine point is on the curve (not twisted)
 constexpr bool is_on_curve(const ecc::Point<Fq>& p) noexcept
 {
     // TODO(C++23): make static
-    constexpr auto B = Fq::from_int(3);
+    constexpr auto B = Fq(3);
 
     const auto x3 = p.x * p.x * p.x;
     const auto y2 = p.y * p.y;
@@ -96,7 +96,7 @@ constexpr bool is_on_twisted_curve(const evmmax::ecc::Point<Fq2>& p)
 /// Verifies that affine point over the base field is infinity.
 constexpr bool is_infinity(const evmmax::ecc::Point<Fq>& p)
 {
-    return p.x.is_zero() && p.y.is_zero();
+    return p.x == 0 && p.y == 0;
 }
 
 /// Verifies that affine point over the Fq^2 extended field is infinity.
@@ -105,7 +105,7 @@ constexpr bool g2_is_infinity(const evmmax::ecc::Point<Fq2>& p)
     return p.x == Fq2::zero() && p.y == Fq2::zero();
 }
 
-// Forbenius endomorphism related functions are implemented based on
+// Frobenius endomorphism related functions are implemented based on
 // https://hackmd.io/@jpw/bn254#mathbb-G_2-membership-check-using-efficient-endomorphism
 // and
 // https://eprint.iacr.org/2010/354.pdf 3.2 Frobenius Operator
@@ -207,6 +207,7 @@ constexpr Fq12 endomorphism(const Fq12& f) noexcept
 
 
 /// Computes `P0 + P1` in Jacobian coordinates.
+/// P0 and P1 must not be the point at infinity, and must not be equal or negations of each other.
 constexpr ecc::JacPoint<Fq2> add(
     const ecc::JacPoint<Fq2>& P0, const ecc::JacPoint<Fq2>& P1) noexcept
 {

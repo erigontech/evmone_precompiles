@@ -3,21 +3,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "block.hpp"
-#include "rlp.hpp"
+#include "transaction.hpp"
 
 namespace evmone::state
 {
 static constexpr auto GAS_LIMIT_ELASTICITY_MULTIPLIER = 2;
 static constexpr auto BASE_FEE_MAX_CHANGE_DENOMINATOR = 8;
-
-static constexpr uint64_t TARGET_BLOB_GAS_PER_BLOCK_CANCUN = 393216;
-static constexpr uint64_t TARGET_BLOB_GAS_PER_BLOCK_PRAGUE = 786432;
-
-static constexpr uint64_t MAX_BLOB_GAS_PER_BLOCK_CANCUN = 786432;
-static constexpr uint64_t MAX_BLOB_GAS_PER_BLOCK_PRAGUE = 1179648;
-
-static constexpr uint64_t BLOB_GASPRICE_UPDATE_FRACTION_CANCUN = 3338477;
-static constexpr uint64_t BLOB_GASPRICE_UPDATE_FRACTION_PRAGUE = 5007716;
 
 uint64_t calc_base_fee(
     int64_t parent_gas_limit, int64_t parent_gas_used, uint64_t parent_base_fee) noexcept
@@ -47,13 +38,14 @@ uint64_t calc_base_fee(
     }
 }
 
-uint64_t max_blob_gas_per_block(evmc_revision rev) noexcept
+uint64_t max_blob_gas_per_block(const BlobParams& blob_params) noexcept
 {
-    return rev >= EVMC_PRAGUE ? MAX_BLOB_GAS_PER_BLOCK_PRAGUE : MAX_BLOB_GAS_PER_BLOCK_CANCUN;
+    return blob_params.max * GAS_PER_BLOB;
 }
 
 
-intx::uint256 compute_blob_gas_price(evmc_revision rev, uint64_t excess_blob_gas) noexcept
+intx::uint256 compute_blob_gas_price(
+    const BlobParams& blob_params, uint64_t excess_blob_gas) noexcept
 {
     /// A helper function approximating `factor * e ** (numerator / denominator)`.
     /// https://eips.ethereum.org/EIPS/eip-4844#helpers
@@ -78,26 +70,25 @@ intx::uint256 compute_blob_gas_price(evmc_revision rev, uint64_t excess_blob_gas
     };
 
     static constexpr auto MIN_BLOB_GASPRICE = 1;
-    const uint64_t blob_gasprice_update_fraction = rev >= EVMC_PRAGUE ?
-                                                       BLOB_GASPRICE_UPDATE_FRACTION_PRAGUE :
-                                                       BLOB_GASPRICE_UPDATE_FRACTION_CANCUN;
-    return fake_exponential(MIN_BLOB_GASPRICE, excess_blob_gas, blob_gasprice_update_fraction);
+    const auto fraction = blob_params.base_fee_update_fraction;
+    return fake_exponential(MIN_BLOB_GASPRICE, excess_blob_gas, fraction);
 }
 
-uint64_t calc_excess_blob_gas(
-    evmc_revision rev, uint64_t parent_blob_gas_used, uint64_t parent_excess_blob_gas) noexcept
+uint64_t calc_excess_blob_gas(evmc_revision rev, const BlobParams& blob_params,
+    uint64_t parent_blob_gas_used, uint64_t parent_excess_blob_gas, uint64_t parent_base_fee,
+    const intx::uint256& parent_blob_base_fee) noexcept
 {
-    const auto target_blob_gas_per_block =
-        rev >= EVMC_PRAGUE ? TARGET_BLOB_GAS_PER_BLOCK_PRAGUE : TARGET_BLOB_GAS_PER_BLOCK_CANCUN;
+    /// The base cost of a blob (EIP-7918).
+    constexpr auto BLOB_BASE_COST = 0x2000;
+
+    const auto target_blob_gas_per_block = uint64_t{blob_params.target} * GAS_PER_BLOB;
     if (parent_excess_blob_gas + parent_blob_gas_used < target_blob_gas_per_block)
         return 0;
-    else
-        return parent_excess_blob_gas + parent_blob_gas_used - target_blob_gas_per_block;
-}
 
-[[nodiscard]] bytes rlp_encode(const Withdrawal& withdrawal)
-{
-    return rlp::encode_tuple(withdrawal.index, withdrawal.validator_index, withdrawal.recipient,
-        withdrawal.amount_in_gwei);
+    if (rev >= EVMC_OSAKA && BLOB_BASE_COST * parent_base_fee > GAS_PER_BLOB * parent_blob_base_fee)
+        return parent_excess_blob_gas +
+               parent_blob_gas_used * (blob_params.max - blob_params.target) / blob_params.max;
+
+    return parent_excess_blob_gas + parent_blob_gas_used - target_blob_gas_per_block;
 }
 }  // namespace evmone::state
