@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "blob_params.hpp"
 #include "bloom_filter.hpp"
 #include "state_diff.hpp"
 #include <intx/intx.hpp>
@@ -12,6 +13,9 @@
 
 namespace evmone::state
 {
+/// The maximum allowed gas limit for a transaction (EIP-7825).
+constexpr auto MAX_TX_GAS_LIMIT = 0x1000000;  // 2**24
+
 using AccessList = std::vector<std::pair<address, std::vector<bytes32>>>;
 
 struct Authorization
@@ -54,22 +58,14 @@ struct Transaction
         /// The typed set code transaction (with authorization list).
         /// Introduced by EIP-7702 https://eips.ethereum.org/EIPS/eip-7702.
         set_code = 4,
-
-        /// The typed transaction with initcode list.
-        /// Introduced by EIP-7873 https://eips.ethereum.org/EIPS/eip-7873.
-        initcodes = 6,
     };
 
     /// Returns amount of blob gas used by this transaction
-    [[nodiscard]] uint64_t blob_gas_used() const
-    {
-        static constexpr auto GAS_PER_BLOB = 0x20000;
-        return GAS_PER_BLOB * blob_hashes.size();
-    }
+    [[nodiscard]] uint64_t blob_gas_used() const { return GAS_PER_BLOB * blob_hashes.size(); }
 
     Type type = Type::legacy;
     bytes data;
-    int64_t gas_limit;
+    int64_t gas_limit = 0;
     intx::uint256 max_gas_price;
     intx::uint256 max_priority_gas_price;
     intx::uint256 max_blob_gas_price;
@@ -84,7 +80,6 @@ struct Transaction
     intx::uint256 s;
     uint8_t v = 0;
     AuthorizationList authorization_list;
-    std::vector<bytes> initcodes;
 };
 
 /// Transaction properties computed during the validation needed for the execution.
@@ -131,15 +126,4 @@ struct TransactionReceipt
     std::optional<bytes32> post_state;
 };
 
-/// Defines how to RLP-encode a Transaction.
-[[nodiscard]] bytes rlp_encode(const Transaction& tx);
-
-/// Defines how to RLP-encode a TransactionReceipt.
-[[nodiscard]] bytes rlp_encode(const TransactionReceipt& receipt);
-
-/// Defines how to RLP-encode a Log.
-[[nodiscard]] bytes rlp_encode(const Log& log);
-
-/// Defines how to RLP-encode an Authorization (EIP-7702).
-[[nodiscard]] bytes rlp_encode(const Authorization& authorization);
 }  // namespace evmone::state

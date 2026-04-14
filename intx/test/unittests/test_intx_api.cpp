@@ -43,6 +43,21 @@ static_assert(clz(uint256{1}) == 255);
 static_assert(clz(uint512{0}) == 512);
 static_assert(clz(uint512{1}) == 511);
 
+static_assert(bit_width(uint128{0}) == 0);
+static_assert(bit_width(uint128{1}) == 1);
+static_assert(bit_width(uint128{2}) == 2);
+static_assert(bit_width(uint256{0}) == 0);
+static_assert(bit_width(uint256{1}) == 1);
+static_assert(bit_width(uint256{1} << 255) == 256);
+
+static_assert(ctz(uint128{0}) == 128);
+static_assert(ctz(uint128{1}) == 0);
+static_assert(ctz(uint128{2}) == 1);
+static_assert(ctz(uint128{0xff} << 70) == 70);
+static_assert(ctz(uint256{0}) == 256);
+static_assert(ctz(uint256{1}) == 0);
+static_assert(ctz(uint256{1} << 255) == 255);
+
 TEST(uint256, div)
 {
     uint256 a = 10001;
@@ -68,6 +83,38 @@ TYPED_TEST(uint_api, constructor)
 
     EXPECT_EQ(x, y);
     EXPECT_EQ(x, z);
+}
+
+TYPED_TEST(uint_api, span_constructor_full)
+{
+    const uint64_t words[] = {1, 2, 3, 4, 5, 6, 7, 8};
+    const std::span<const uint64_t> words_span(words, TypeParam::num_words);
+    const TypeParam value{words_span};
+
+    for (size_t i = 0; i < words_span.size(); ++i)
+    {
+        EXPECT_EQ(value[i], words[i]);
+    }
+}
+
+TYPED_TEST(uint_api, span_constructor_empty)
+{
+    const std::span<const uint64_t> empty_span;
+    const TypeParam value{empty_span};
+    EXPECT_EQ(value, 0);
+}
+
+TYPED_TEST(uint_api, span_constructor_partial)
+{
+    const uint64_t words[] = {1, 2, 3, 4, 5, 6, 7, 8};
+    const std::span<const uint64_t> words_span(words, TypeParam::num_words - 1);
+    const TypeParam value{words_span};
+
+    for (size_t i = 0; i < words_span.size(); ++i)
+    {
+        EXPECT_EQ(value[i], words[i]);
+    }
+    EXPECT_EQ(value[TypeParam::num_words - 1], 0u);
 }
 
 TYPED_TEST(uint_api, arithmetic)
@@ -401,4 +448,33 @@ TYPED_TEST(uint_api, explicit_conversion_to_integral_type)
     EXPECT_EQ(static_cast<signed long long>(y), -2);
     EXPECT_EQ(static_cast<unsigned long long>(x), 3u);
     EXPECT_EQ(static_cast<unsigned long long>(y), 0xfffffffffffffffe);
+}
+
+TYPED_TEST(uint_api, ctz)
+{
+    auto x = TypeParam{};
+    EXPECT_EQ(ctz(x), TypeParam::num_bits);
+    x = 1;
+    EXPECT_EQ(ctz(x), 0);
+    x <<= 64;
+    EXPECT_EQ(ctz(x), 64);
+    x = 0xff;
+    EXPECT_EQ(ctz(x), 0);
+    x <<= TypeParam::num_bits - 1;
+    EXPECT_EQ(ctz(x), TypeParam::num_bits - 1);
+}
+
+TYPED_TEST(uint_api, bit_test)
+{
+    auto x = TypeParam{};
+    EXPECT_EQ(bit_test(x, 0), 0);
+    EXPECT_EQ(bit_test(x, TypeParam::num_bits - 1), 0);
+    x = 1;
+    EXPECT_EQ(bit_test(x, 0), 1);
+    EXPECT_EQ(bit_test(x, 1), 0);
+    EXPECT_EQ(bit_test(x, TypeParam::num_bits - 1), 0);
+    x = ~x;
+    EXPECT_EQ(bit_test(x, 0), 0);
+    EXPECT_EQ(bit_test(x, 1), 1);
+    EXPECT_EQ(bit_test(x, TypeParam::num_bits - 1), 1);
 }
