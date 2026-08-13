@@ -32,13 +32,13 @@ TEST(state_tx, validate_nonce)
     EXPECT_EQ(std::get<std::error_code>(
                   validate_transaction(state, block, tx, EVMC_BERLIN, block.gas_limit, 0))
                   .message(),
-        "nonce too low");
+        "TransactionException.NONCE_MISMATCH_TOO_LOW");
 
     tx.nonce = 2;
     EXPECT_EQ(std::get<std::error_code>(
                   validate_transaction(state, block, tx, EVMC_BERLIN, block.gas_limit, 0))
                   .message(),
-        "nonce too high");
+        "TransactionException.NONCE_MISMATCH_TOO_HIGH");
 }
 
 TEST(state_tx, validate_sender)
@@ -61,14 +61,14 @@ TEST(state_tx, validate_sender)
     EXPECT_EQ(std::get<std::error_code>(
                   validate_transaction(state, block, tx, EVMC_LONDON, block.gas_limit, 0))
                   .message(),
-        "max fee per gas less than block base fee");
+        "TransactionException.INSUFFICIENT_MAX_FEE_PER_GAS");
 
     tx.max_gas_price = block.base_fee;
 
     EXPECT_EQ(std::get<std::error_code>(
                   validate_transaction(state, block, tx, EVMC_LONDON, block.gas_limit, 0))
                   .message(),
-        "insufficient funds for gas * price + value");
+        "TransactionException.INSUFFICIENT_ACCOUNT_FUNDS");
 }
 
 TEST(state_tx, validate_blob_tx)
@@ -85,6 +85,7 @@ TEST(state_tx, validate_blob_tx)
         .gas_limit = 60000,
         .max_gas_price = block.base_fee,
         .sender = 0x02_address,
+        .chain_id = 1,
     };
     const TestState state{{tx.sender, {.balance = 1'000'000}}};
 
@@ -92,7 +93,7 @@ TEST(state_tx, validate_blob_tx)
         static_cast<int64_t>(max_blob_gas_per_block(get_blob_params(EVMC_CANCUN)));
     EXPECT_EQ(std::get<std::error_code>(validate_transaction(
                   state, block, tx, EVMC_SHANGHAI, block.gas_limit, blob_gas_limit)),
-        make_error_code(ErrorCode::TX_TYPE_NOT_SUPPORTED));
+        make_error_code(ErrorCode::TYPE_NOT_SUPPORTED));
 
     EXPECT_EQ(std::get<std::error_code>(validate_transaction(state, block, tx, EVMC_CANCUN,
                                             block.gas_limit, blob_gas_limit))
@@ -116,8 +117,8 @@ TEST(state_tx, validate_blob_tx)
             validate_transaction(state, block, tx, EVMC_CANCUN, block.gas_limit, g));
     };
 
-    EXPECT_EQ(
-        expect_error(blob_gas_limit), make_error_code(ErrorCode::BLOB_FEE_CAP_LESS_THAN_BLOCKS));
+    EXPECT_EQ(expect_error(blob_gas_limit),
+        make_error_code(ErrorCode::INSUFFICIENT_MAX_FEE_PER_BLOB_GAS));
 
     tx.max_blob_gas_price = 1;
     tx.blob_hashes.push_back(
@@ -139,24 +140,26 @@ TEST(state_tx, validate_blob_tx)
 
 TEST(state_tx, validate_eof_create_transaction)
 {
+    // Check if a create-tx with EOF initcode is valid.
+
     const BlockInfo block{
         .gas_limit = 1'000'000,
     };
     const Transaction tx{
         .data = "EF00 01 010004 0200010001 030004 00 00000000 00 AABBCCDD"_hex,
-        .gas_limit = 60000,
+        .gas_limit = block.gas_limit,
         .sender = 0x02_address,
         .to = {},
         .nonce = 1,
     };
     const TestState state{{tx.sender, {.nonce = 1, .balance = 1'000'000}}};
 
-    EXPECT_FALSE(holds_alternative<std::error_code>(
-        validate_transaction(state, block, tx, EVMC_CANCUN, 60000, 0)));
-    EXPECT_FALSE(holds_alternative<std::error_code>(
-        validate_transaction(state, block, tx, EVMC_PRAGUE, 60000, 0)));
-    EXPECT_FALSE(holds_alternative<std::error_code>(
-        validate_transaction(state, block, tx, EVMC_EXPERIMENTAL, 60000, 0)));
+    for (int r = EVMC_CANCUN; r <= EVMC_MAX_REVISION; ++r)
+    {
+        const auto rev = static_cast<evmc_revision>(r);
+        const auto res = validate_transaction(state, block, tx, rev, block.gas_limit, 0);
+        EXPECT_FALSE(holds_alternative<std::error_code>(res));
+    }
 }
 
 TEST(state_tx, validate_tx_data_cost)
@@ -214,6 +217,7 @@ TEST(state_tx, max_blob_count)
         .max_blob_gas_price = 1,
         .sender = 0x02_address,
         .to = 0x01_address,
+        .chain_id = 1,
     };
     const TestState state{{tx.sender, {.balance = 1'000'000}}};
     const auto blob_gas_limit =
@@ -248,5 +252,5 @@ TEST(state_tx, max_gas_limit_exceeded)
 
     EXPECT_EQ(std::get<std::error_code>(
                   validate_transaction(state, block, tx, EVMC_OSAKA, block.gas_limit, 0)),
-        make_error_code(ErrorCode::MAX_GAS_LIMIT_EXCEEDED));
+        make_error_code(ErrorCode::GAS_LIMIT_EXCEEDS_MAXIMUM));
 }

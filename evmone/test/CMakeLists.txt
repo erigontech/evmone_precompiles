@@ -15,25 +15,19 @@ find_package(GTest CONFIG REQUIRED)
 hunter_add_package(benchmark)
 find_package(benchmark CONFIG REQUIRED)
 
-hunter_add_package(nlohmann_json)
-find_package(nlohmann_json CONFIG REQUIRED)
-
 include(CableBuildInfo)
 cable_add_buildinfo_library(PROJECT_NAME evmone)
 
-add_subdirectory(utils)
 add_subdirectory(bench)
 add_subdirectory(blockchaintest)
 add_subdirectory(experimental)
 add_subdirectory(integration)
 add_subdirectory(internal_benchmarks)
 add_subdirectory(precompiles_bench)
-add_subdirectory(state)
 add_subdirectory(statetest)
-add_subdirectory(t8n)
 add_subdirectory(unittests)
 
-set(targets evmone-bench evmone-bench-internal evmone-blockchaintest evmone-precompiles-bench evmone-state evmone-statetest evmone-t8n evmone-unittests)
+set(targets evmone-bench evmone-bench-internal evmone-blockchaintest evmone-precompiles-bench evmone-state evmone-statetest evmone-unittests)
 
 if(EVMONE_FUZZING)
     add_subdirectory(fuzzer)

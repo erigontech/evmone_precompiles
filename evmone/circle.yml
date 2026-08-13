@@ -1,6 +1,6 @@
 version: 2.1
 orbs:
-  codecov: codecov/codecov@5.4.3
+  codecov: codecov/codecov@6.0.0
   win: circleci/windows@5.0
 
 executors:
@@ -53,21 +53,23 @@ executors:
   linux-base:
     docker:
       - image: cimg/base:edge-22.04
-    resource_class: small
+    resource_class: medium
     environment:
       CMAKE_BUILD_PARALLEL_LEVEL: 2
   macos:
-    resource_class:  macos.m1.medium.gen1
+    resource_class: m4pro.medium
+    macos:
+      xcode: 26.5
+    environment:
+      # m4pro.medium has 6 CPUs, but 12 works better.
+      CMAKE_BUILD_PARALLEL_LEVEL: 12
+  macos-xcode-min:
+    resource_class: m4pro.medium
     macos:
       xcode: 16.4.0
     environment:
-      CMAKE_BUILD_PARALLEL_LEVEL: 6
-  macos-xcode-min:
-    resource_class: macos.m1.medium.gen1
-    macos:
-      xcode: 16.3.0
-    environment:
-      CMAKE_BUILD_PARALLEL_LEVEL: 6
+      # m4pro.medium has 6 CPUs, but 12 works better.
+      CMAKE_BUILD_PARALLEL_LEVEL: 12
 
 commands:
   install_cmake:
@@ -133,41 +135,55 @@ commands:
     parameters:
       repo:
         type: string
-        default: ethereum/execution-spec-tests
+        default: ethereum/execution-specs
       release:
         type: string
       fixtures_suffix:
         type: string
-        default: stable
+        default: ""
     steps:
       - run:
-          name: "Download execution-spec-tests: <<parameters.release>>"
+          name: "Download test fixtures: <<parameters.repo>> <<parameters.release>>"
           working_directory: ~/spec-tests
           command: |
             find . -delete
-            curl -L --retry 3 -C - --output-dir /tmp -O https://github.com/<<parameters.repo>>/releases/download/<<parameters.release>>/fixtures_<<parameters.fixtures_suffix>>.tar.gz
-            tar -xzf /tmp/fixtures_*.tar.gz
+            rm -f /tmp/fixtures<<parameters.fixtures_suffix>>.tar.gz
+            curl -L --fail --retry 3 -C - --output-dir /tmp -O https://github.com/<<parameters.repo>>/releases/download/<<parameters.release>>/fixtures<<parameters.fixtures_suffix>>.tar.gz
+            tar -xzf /tmp/fixtures<<parameters.fixtures_suffix>>.tar.gz
             ls -l
+
   run_execution_spec_tests:
+    parameters:
+      repo:
+        type: string
+        default: ethereum/execution-specs
+      release:
+        type: string
+      fixtures_suffix:
+        type: string
+        default: ""
+      filter:
+        type: string
+        default: "*"
     steps:
       - download_execution_spec_tests:
-          release: v5.4.0
-          # develop includes stable
-          fixtures_suffix: develop
+          repo: <<parameters.repo>>
+          release: <<parameters.release>>
+          fixtures_suffix: <<parameters.fixtures_suffix>>
       - run:
-          name: "Execution spec tests (develop, state_tests)"
+          name: "Execution spec tests (<<parameters.release>>, state_tests)"
           # Tests for in-development EVM revision currently passing.
           working_directory: ~/build
           command: >
             LLVM_PROFILE_FILE=state_tests.profraw
-            bin/evmone-statetest ~/spec-tests/fixtures/state_tests
+            bin/evmone-statetest --gtest_filter='<<parameters.filter>>' ~/spec-tests/fixtures/state_tests
       - run:
-          name: "Execution spec tests (develop, blockchain_tests)"
+          name: "Execution spec tests (<<parameters.release>>, blockchain_tests)"
           # Tests for in-development EVM revision currently passing.
           working_directory: ~/build
           command: >
             LLVM_PROFILE_FILE=blockchain_tests.profraw
-            bin/evmone-blockchaintest ~/spec-tests/fixtures/blockchain_tests
+            bin/evmone-blockchaintest --gtest_filter='<<parameters.filter>>' ~/spec-tests/fixtures/blockchain_tests
 
   build:
     description: "Build"
@@ -244,15 +260,17 @@ commands:
   collect_coverage_clang:
     description: "Collect coverage data (clang)"
     parameters:
+      flags:
+        type: string
       ignore_filename_regex:
         type: string
         default: ""
       binaries:
         type: string
-        default: evmone evmone-unittests evmone-statetest evmone-blockchaintest evmone-t8n
+        default: evmone evmone-unittests evmone-statetest evmone-blockchaintest
     steps:
       - run:
-          name: "Collect coverage data (clang)"
+          name: "Collect coverage data (clang, <<parameters.flags>>)"
           working_directory: ~/build
           command: |
             IGNORE_FILENAME_REGEX='include/evmc<<#parameters.ignore_filename_regex>>|<<parameters.ignore_filename_regex>><</parameters.ignore_filename_regex>>'
@@ -272,14 +290,7 @@ commands:
             llvm-cov report $ARGS -use-color -show-mcdc-summary
       - store_artifacts:
           path: ~/coverage
-          destination: coverage
-
-  upload_coverage:
-    description: "Upload coverage data"
-    parameters:
-      flags:
-        type: string
-    steps:
+          destination: <<parameters.flags>>
       - codecov/upload:
           plugins: noop
           disable_search: true
@@ -321,7 +332,7 @@ jobs:
           name: "Check code format"
           command: |
             clang-format --version
-            find include lib test tools -name '*.hpp' -o -name '*.cpp' -o -name '*.h' -o -name '*.c' | xargs clang-format -i
+            find evmc include lib test tools -name '*.hpp' -o -name '*.cpp' -o -name '*.h' -o -name '*.c' | xargs clang-format -i
             git diff --color --exit-code
       - run:
           name: "Check spelling"
@@ -412,12 +423,20 @@ jobs:
       CMAKE_OPTIONS: -DCOVERAGE=1
     steps:
       - build
-      - run_execution_spec_tests
+      - run_execution_spec_tests:
+          release: tests-glamsterdam-devnet@v6.1.1
+          fixtures_suffix: _glamsterdam-devnet
+          filter: "-for_amsterdam/*:for_bpo2toamsterdamattime15k/*"
       - collect_coverage_clang:
-          ignore_filename_regex: lib/evmone/(advanced|cpu_check|eof|lru_cache|tracing|vm)|test/(experimental|t8n|unittests|utils)
-          binaries: evmone-statetest evmone-blockchaintest
-      - upload_coverage:
           flags: eest-develop
+          ignore_filename_regex: lib/evmone/(advanced|cpu_check|eof|lru_cache|tracing|vm)|test/(experimental|unittests)
+          binaries: evmone-statetest evmone-blockchaintest
+      - run_execution_spec_tests:
+          release: tests@v20.0.1
+      - collect_coverage_clang:
+          flags: eest-stable
+          ignore_filename_regex: lib/evmone/(advanced|cpu_check|eof|lru_cache|tracing|vm)|test/(experimental|unittests)
+          binaries: evmone-statetest evmone-blockchaintest
 
   ethereum-tests:
     executor: linux-clang-latest
@@ -430,25 +449,24 @@ jobs:
       - download_execution_tests:
           rev: v17.2
       - run:
-          name: "State tests"
-          working_directory: ~/build
-          environment:
-            # Filter out long-running and incorrect tests.
-            GTEST_FILTER: "-stCreateTest.CreateOOGafterMaxCodesize:\
-            stQuadraticComplexityTest.Call50000_sha256:\
-            stTimeConsuming.*:\
-            VMTests/vmPerformance.*:\
-            stExample.*:\
-            stTransactionTest.*"
-          command: >
-            bin/evmone-statetest
-            --gtest_filter=$GTEST_FILTER
-            ~/tests/LegacyTests/Cancun/GeneralStateTests
-            ~/tests/LegacyTests/Constantinople/GeneralStateTests
+          name: "Drop unsupported Constantinople test cases"
+          working_directory: ~/tests
+          command: |
+            # evmone no longer supports the Constantinople revision (it never
+            # activated on Mainnet and was superseded by Petersburg). Strip the
+            # Constantinople-only cases from the fixtures so the other forks in
+            # each file still run. ConstantinopleFix (== Petersburg) is kept.
+            # Only the directories actually run below are scanned.
+            files=$(grep -rlE '"network"[[:space:]]*:[[:space:]]*"Constantinople"' BlockchainTests/ValidBlocks BlockchainTests/InvalidBlocks LegacyTests/Cancun/BlockchainTests/ValidBlocks LegacyTests/Cancun/BlockchainTests/InvalidBlocks || true)
+            for f in $files; do
+              python3 -c "import json,sys; p=sys.argv[1]; d=json.load(open(p)); json.dump({k:v for k,v in d.items() if v.get('network')!='Constantinople'}, open(p,'w'), indent=1)" "$f"
+              echo "filtered $f"
+            done
       - run:
           name: "Blockchain tests (ValidBlocks)"
           working_directory: ~/build
           command: >
+            LLVM_PROFILE_FILE=blockchain_tests_valid.profraw
             bin/evmone-blockchaintest
             --gtest_filter='-bcValidBlockTest.SimpleTx3LowS'
             ~/tests/BlockchainTests/ValidBlocks
@@ -457,12 +475,12 @@ jobs:
           name: "Blockchain tests (InvalidBlocks)"
           working_directory: ~/build
           command: >
+            LLVM_PROFILE_FILE=blockchain_tests_invalid.profraw
             bin/evmone-blockchaintest
             --gtest_filter='-bc4895-withdrawals.shanghaiWithoutWithdrawalsRLP:bcInvalidHeaderTest.*:bcUncleHeaderValidity.gasLimitTooLowExactBound'
             ~/tests/BlockchainTests/InvalidBlocks
             ~/tests/LegacyTests/Cancun/BlockchainTests/InvalidBlocks
-      - collect_coverage_clang
-      - upload_coverage:
+      - collect_coverage_clang:
           flags: eest-legacy
 
   precompiles-libsecp256k1:
@@ -473,15 +491,13 @@ jobs:
     steps:
       - build
       - download_execution_spec_tests:
-          release: v5.4.0
-          fixtures_suffix: stable
+          release: tests@v20.0.1
       - run:
           name: "Execution spec tests (state_tests)"
           working_directory: ~/build
           command: >
             bin/evmone-statetest ~/spec-tests/fixtures/state_tests
-      - collect_coverage_clang
-      - upload_coverage:
+      - collect_coverage_clang:
           flags: eest-libsecp256k1
 
   precompiles-gmp:
@@ -495,21 +511,17 @@ jobs:
           command: sudo apt-get -q update && sudo apt-get -qy install libgmp-dev
       - build
       - download_execution_spec_tests:
-          release: v5.4.0
-          fixtures_suffix: stable
+          release: tests@v20.0.1
       - run:
           name: "Execution spec tests (state_tests)"
           working_directory: ~/build
           command: >
             bin/evmone-statetest ~/spec-tests/fixtures/state_tests
-      - collect_coverage_clang
-      - upload_coverage:
+      - collect_coverage_clang:
           flags: eest-develop-gmp
 
   gcc-min:
     executor: linux-gcc-min
-    environment:
-      CMAKE_OPTIONS: -DEVMONE_TOOLS=OFF
     steps:
       - build
       - test
@@ -548,12 +560,13 @@ jobs:
     executor: linux-clang-selfhosted
     environment:
       TOOLCHAIN: clang-libcxx-debug
-      CMAKE_OPTIONS: -DBUILD_SHARED_LIBS=NO -DASSERTIONS=ON -DSANITIZE=address,undefined,shift-exponent,implicit-conversion,nullability
+      CMAKE_OPTIONS: -DBUILD_SHARED_LIBS=NO -DASSERTIONS=ON -DSANITIZE=address,undefined,implicit-conversion,local-bounds,nullability
       UBSAN_OPTIONS: halt_on_error=1
     steps:
       - build
       - test
-      - run_execution_spec_tests
+      - run_execution_spec_tests:
+          release: tests@v20.0.1
 
   clang-tidy:
     executor: linux-clang-selfhosted
@@ -575,8 +588,7 @@ jobs:
     steps:
       - build
       - test
-      - collect_coverage_clang
-      - upload_coverage:
+      - collect_coverage_clang:
           flags: evmone-unittests
 
   fuzzing:

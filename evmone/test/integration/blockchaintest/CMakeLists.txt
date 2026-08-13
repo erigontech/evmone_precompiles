@@ -17,5 +17,21 @@ set_tests_properties(
     PASS_REGULAR_EXPRESSION ".*2 tests from"
 )
 
+# Exercise block-level gas accounting (EIP-7778).
+add_test(
+    NAME ${PREFIX}/eip7778_block_gas
+    COMMAND evmone-blockchaintest ${TESTS1}/eip7778_block_gas.json
+)
+
+# A block invalid by its signature must not be judged by another check.
+add_test(
+    NAME ${PREFIX}/unrecovered_sender_blob_gas
+    COMMAND evmone-blockchaintest ${TESTS1}/unrecovered_sender_blob_gas.json
+)
+add_test(
+    NAME ${PREFIX}/unrecovered_sender_deposit_log
+    COMMAND evmone-blockchaintest ${TESTS1}/unrecovered_sender_deposit_log.json
+)
+
 get_directory_property(ALL_TESTS TESTS)
 set_tests_properties(${ALL_TESTS} PROPERTIES ENVIRONMENT LLVM_PROFILE_FILE=${CMAKE_BINARY_DIR}/integration-%p.profraw)
