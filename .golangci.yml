@@ -1,0 +1,22 @@
+version: "2"
+
+run:
+  # Every package here is cgo; without this the linter sees no Go code at all.
+  build-tags: []
+
+linters:
+  default: standard
+  enable:
+    - misspell
+    - unconvert
+    - usestdlibvars
+  settings:
+    govet:
+      enable:
+        # The whole package is unsafe.Pointer conversions into C++.
+        - unsafeptr
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
