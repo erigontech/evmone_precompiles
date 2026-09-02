@@ -39,4 +39,12 @@ target_sources(
     sha256.cpp
     kzg.hpp
     kzg.cpp
+    kzg_precomputed_lines.hpp
+    kzg_precomputed_lines.cpp
+)
+
+# Enable optimizations in the cryptography code also in Debug builds, otherwise it is very slow.
+target_compile_options(
+    evmone_precompiles PRIVATE
+    $<$<AND:$<CONFIG:Debug>,$<CXX_COMPILER_ID:GNU,Clang,AppleClang>>:-O1>
 )

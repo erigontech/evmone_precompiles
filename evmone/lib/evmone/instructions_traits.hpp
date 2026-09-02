@@ -129,14 +129,12 @@ constexpr inline GasCostTable gas_costs = []() noexcept {
     table[EVMC_BYZANTIUM][OP_STATICCALL] = 700;
     table[EVMC_BYZANTIUM][OP_REVERT] = 0;
 
-    table[EVMC_CONSTANTINOPLE] = table[EVMC_BYZANTIUM];
-    table[EVMC_CONSTANTINOPLE][OP_SHL] = 3;
-    table[EVMC_CONSTANTINOPLE][OP_SHR] = 3;
-    table[EVMC_CONSTANTINOPLE][OP_SAR] = 3;
-    table[EVMC_CONSTANTINOPLE][OP_EXTCODEHASH] = 400;
-    table[EVMC_CONSTANTINOPLE][OP_CREATE2] = 32000;
-
-    table[EVMC_PETERSBURG] = table[EVMC_CONSTANTINOPLE];
+    table[EVMC_PETERSBURG] = table[EVMC_BYZANTIUM];
+    table[EVMC_PETERSBURG][OP_SHL] = 3;
+    table[EVMC_PETERSBURG][OP_SHR] = 3;
+    table[EVMC_PETERSBURG][OP_SAR] = 3;
+    table[EVMC_PETERSBURG][OP_EXTCODEHASH] = 400;
+    table[EVMC_PETERSBURG][OP_CREATE2] = 32000;
 
     table[EVMC_ISTANBUL] = table[EVMC_PETERSBURG];
     table[EVMC_ISTANBUL][OP_BALANCE] = 700;
@@ -176,7 +174,13 @@ constexpr inline GasCostTable gas_costs = []() noexcept {
     table[EVMC_OSAKA] = table[EVMC_PRAGUE];
     table[EVMC_OSAKA][OP_CLZ] = 5;
 
-    table[EVMC_EXPERIMENTAL] = table[EVMC_OSAKA];
+    table[EVMC_AMSTERDAM] = table[EVMC_OSAKA];
+    table[EVMC_AMSTERDAM][OP_SLOTNUM] = 2;
+    table[EVMC_AMSTERDAM][OP_DUPN] = 3;
+    table[EVMC_AMSTERDAM][OP_SWAPN] = 3;
+    table[EVMC_AMSTERDAM][OP_EXCHANGE] = 3;
+
+    table[EVMC_EXPERIMENTAL] = table[EVMC_AMSTERDAM];
 
     return table;
 }();
@@ -252,9 +256,9 @@ constexpr inline std::array<Traits, 256> traits = []() noexcept {
     table[OP_XOR] = {"XOR", 0, false, 2, -1, EVMC_FRONTIER};
     table[OP_NOT] = {"NOT", 0, false, 1, 0, EVMC_FRONTIER};
     table[OP_BYTE] = {"BYTE", 0, false, 2, -1, EVMC_FRONTIER};
-    table[OP_SHL] = {"SHL", 0, false, 2, -1, EVMC_CONSTANTINOPLE};
-    table[OP_SHR] = {"SHR", 0, false, 2, -1, EVMC_CONSTANTINOPLE};
-    table[OP_SAR] = {"SAR", 0, false, 2, -1, EVMC_CONSTANTINOPLE};
+    table[OP_SHL] = {"SHL", 0, false, 2, -1, EVMC_PETERSBURG};
+    table[OP_SHR] = {"SHR", 0, false, 2, -1, EVMC_PETERSBURG};
+    table[OP_SAR] = {"SAR", 0, false, 2, -1, EVMC_PETERSBURG};
     table[OP_CLZ] = {"CLZ", 0, false, 1, 0, EVMC_OSAKA};
 
     table[OP_KECCAK256] = {"KECCAK256", 0, false, 2, -1, EVMC_FRONTIER};
@@ -274,7 +278,7 @@ constexpr inline std::array<Traits, 256> traits = []() noexcept {
     table[OP_EXTCODECOPY] = {"EXTCODECOPY", 0, false, 4, -4, EVMC_FRONTIER};
     table[OP_RETURNDATASIZE] = {"RETURNDATASIZE", 0, false, 0, 1, EVMC_BYZANTIUM};
     table[OP_RETURNDATACOPY] = {"RETURNDATACOPY", 0, false, 3, -3, EVMC_BYZANTIUM};
-    table[OP_EXTCODEHASH] = {"EXTCODEHASH", 0, false, 1, 0, EVMC_CONSTANTINOPLE};
+    table[OP_EXTCODEHASH] = {"EXTCODEHASH", 0, false, 1, 0, EVMC_PETERSBURG};
 
     table[OP_BLOCKHASH] = {"BLOCKHASH", 0, false, 1, 0, EVMC_FRONTIER};
     table[OP_COINBASE] = {"COINBASE", 0, false, 0, 1, EVMC_FRONTIER};
@@ -287,6 +291,7 @@ constexpr inline std::array<Traits, 256> traits = []() noexcept {
     table[OP_BASEFEE] = {"BASEFEE", 0, false, 0, 1, EVMC_LONDON};
     table[OP_BLOBHASH] = {"BLOBHASH", 0, false, 1, 0, EVMC_CANCUN};
     table[OP_BLOBBASEFEE] = {"BLOBBASEFEE", 0, false, 0, 1, EVMC_CANCUN};
+    table[OP_SLOTNUM] = {"SLOTNUM", 0, false, 0, 1, EVMC_AMSTERDAM};
 
     table[OP_POP] = {"POP", 0, false, 1, -1, EVMC_FRONTIER};
     table[OP_MLOAD] = {"MLOAD", 0, false, 1, 0, EVMC_FRONTIER};
@@ -372,6 +377,12 @@ constexpr inline std::array<Traits, 256> traits = []() noexcept {
     table[OP_SWAP15] = {"SWAP15", 0, false, 16, 0, EVMC_FRONTIER};
     table[OP_SWAP16] = {"SWAP16", 0, false, 17, 0, EVMC_FRONTIER};
 
+    // Stack height_required is 0 because it depends on the immediate.
+    // The opcode handler is assumed to check stack height.
+    table[OP_DUPN] = {"DUPN", 1, false, 0, 1, EVMC_AMSTERDAM};
+    table[OP_SWAPN] = {"SWAPN", 1, false, 0, 0, EVMC_AMSTERDAM};
+    table[OP_EXCHANGE] = {"EXCHANGE", 1, false, 0, 0, EVMC_AMSTERDAM};
+
     table[OP_LOG0] = {"LOG0", 0, false, 2, -2, EVMC_FRONTIER};
     table[OP_LOG1] = {"LOG1", 0, false, 3, -3, EVMC_FRONTIER};
     table[OP_LOG2] = {"LOG2", 0, false, 4, -4, EVMC_FRONTIER};
@@ -385,7 +396,7 @@ constexpr inline std::array<Traits, 256> traits = []() noexcept {
     table[OP_CALLCODE] = {"CALLCODE", 0, false, 7, -6, EVMC_FRONTIER};
     table[OP_RETURN] = {"RETURN", 0, true, 2, -2, EVMC_FRONTIER};
     table[OP_DELEGATECALL] = {"DELEGATECALL", 0, false, 6, -5, EVMC_HOMESTEAD};
-    table[OP_CREATE2] = {"CREATE2", 0, false, 4, -3, EVMC_CONSTANTINOPLE};
+    table[OP_CREATE2] = {"CREATE2", 0, false, 4, -3, EVMC_PETERSBURG};
     table[OP_STATICCALL] = {"STATICCALL", 0, false, 6, -5, EVMC_BYZANTIUM};
     table[OP_REVERT] = {"REVERT", 0, true, 2, -2, EVMC_BYZANTIUM};
     table[OP_INVALID] = {"INVALID", 0, true, 0, 0, EVMC_FRONTIER};

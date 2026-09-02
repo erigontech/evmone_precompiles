@@ -23,7 +23,7 @@ cable_set_build_type(DEFAULT Release CONFIGURATION_TYPES Release Debug)
 include(Hunter/init)
 
 project(evmone LANGUAGES CXX C)
-set(PROJECT_VERSION 0.21.0)
+set(PROJECT_VERSION 0.23.0)
 
 option(EVMONE_TOOLS "Build evmone tools" ${PROJECT_IS_TOP_LEVEL})
 
@@ -53,7 +53,9 @@ if(CABLE_COMPILER_GNULIKE)
         $<$<COMPILE_LANGUAGE:CXX>:-Wextra-semi>
         $<$<COMPILE_LANGUAGE:CXX>:-Wno-missing-field-initializers>
 
-        $<$<CXX_COMPILER_ID:GNU>:-Wno-attributes>
+        $<$<AND:$<CXX_COMPILER_ID:GNU>,$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,12>>:-Wno-attributes=clang::>
+        $<$<AND:$<CXX_COMPILER_ID:GNU>,$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,12>>:-Wno-attributes=msvc::>
+        $<$<AND:$<CXX_COMPILER_ID:GNU>,$<VERSION_LESS:$<CXX_COMPILER_VERSION>,12>>:-Wno-attributes>
         $<$<CXX_COMPILER_ID:GNU>:-Wduplicated-cond>
         $<$<CXX_COMPILER_ID:GNU>:-Wlogical-op>
 
@@ -153,10 +155,17 @@ set(include_dir ${CMAKE_CURRENT_SOURCE_DIR}/include)
 add_subdirectory(lib)
 
 if(EVMONE_TOOLS)
+    hunter_add_package(nlohmann_json)
+    find_package(nlohmann_json CONFIG REQUIRED)
+    add_subdirectory(test/state)
+    add_subdirectory(test/utils)
     add_subdirectory(tools)
 endif()
 
 if(EVMONE_TESTING)
+    if(NOT EVMONE_TOOLS)
+        message(FATAL_ERROR "EVMONE_TESTING requires EVMONE_TOOLS")
+    endif()
     enable_testing()
     add_subdirectory(test)
 endif()

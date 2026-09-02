@@ -2,6 +2,7 @@
 // Copyright 2019 The evmone Authors.
 // SPDX-License-Identifier: Apache-2.0
 
+#include "constants.hpp"
 #include "instructions.hpp"
 
 namespace evmone::instr::core
@@ -30,7 +31,6 @@ constexpr auto storage_cost_spec = []() noexcept {
         tbl[rev] = {false, 200, 20000, 5000, 15000};
 
     // Net cost schedule.
-    tbl[EVMC_CONSTANTINOPLE] = {true, 200, 20000, 5000, 15000};
     tbl[EVMC_ISTANBUL] = {true, 800, 20000, 5000, 15000};
     tbl[EVMC_BERLIN] = {
         true, instr::warm_storage_read_cost, 20000, 5000 - instr::cold_sload_cost, 15000};
@@ -41,6 +41,7 @@ constexpr auto storage_cost_spec = []() noexcept {
     tbl[EVMC_CANCUN] = tbl[EVMC_LONDON];
     tbl[EVMC_PRAGUE] = tbl[EVMC_LONDON];
     tbl[EVMC_OSAKA] = tbl[EVMC_LONDON];
+    tbl[EVMC_AMSTERDAM] = tbl[EVMC_LONDON];
     tbl[EVMC_EXPERIMENTAL] = tbl[EVMC_LONDON];
     return tbl;
 }();
@@ -120,7 +121,7 @@ Result sstore(StackTop stack, int64_t gas_left, ExecutionState& state) noexcept
     if (state.in_static_mode())
         return {EVMC_STATIC_MODE_VIOLATION, gas_left};
 
-    if (state.rev >= EVMC_ISTANBUL && gas_left <= 2300)
+    if (state.rev >= EVMC_ISTANBUL && gas_left <= CALL_STIPEND)
         return {EVMC_OUT_OF_GAS, gas_left};
 
     const auto key = intx::be::store<evmc::bytes32>(stack.pop());

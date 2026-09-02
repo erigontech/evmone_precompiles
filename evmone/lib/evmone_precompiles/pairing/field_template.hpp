@@ -4,6 +4,8 @@
 #pragma once
 
 #include <array>
+#include <concepts>
+#include <type_traits>
 
 namespace evmmax::ecc
 {
@@ -12,8 +14,8 @@ namespace evmmax::ecc
 template <typename ConfigT>
 struct ExtFieldElem
 {
-    using ValueT = typename ConfigT::ValueT;
-    using Base = typename ConfigT::BaseFieldT;
+    using ValueT = ConfigT::ValueT;
+    using Base = ConfigT::BaseFieldT;
     static constexpr auto DEGREE = ConfigT::DEGREE;
     using CoeffArrT = std::array<ValueT, DEGREE>;
 
@@ -26,12 +28,19 @@ struct ExtFieldElem
     /// TODO: This constructor may be optimized to avoid copying the array.
     explicit constexpr ExtFieldElem(const CoeffArrT& cs) noexcept : coeffs{cs} {}
 
+    /// Create an element from literal coefficient values, converted to the underlying
+    /// representation at compile-time. Allows defining constants as e.g. Fq2{1, 2}.
+    template <typename... Ts>
+        requires(sizeof...(Ts) == DEGREE && (std::constructible_from<ValueT, Ts> && ...) &&
+                 (!std::same_as<std::remove_cvref_t<Ts>, ValueT> && ...))
+    consteval ExtFieldElem(const Ts&... cs) noexcept : coeffs{ValueT{cs}...}
+    {}
+
+    /// Returns the conjugate of a degree-2 extension field element: (a, b) → (a, -b).
     constexpr ExtFieldElem conjugate() const noexcept
+        requires(DEGREE == 2)
     {
-        auto res = this->coeffs;
-        for (size_t i = 1; i < DEGREE; i += 2)
-            res[i] = -res[i];
-        return ExtFieldElem(res);
+        return ExtFieldElem({coeffs[0], -coeffs[1]});
     }
 
     static constexpr ExtFieldElem one() noexcept
@@ -40,8 +49,6 @@ struct ExtFieldElem
         res.coeffs[0] = ValueT::one();
         return res;
     }
-
-    static constexpr ExtFieldElem zero() noexcept { return ExtFieldElem{}; }
 
     constexpr ExtFieldElem inv() const noexcept { return inverse(*this); }
 
@@ -69,8 +76,14 @@ struct ExtFieldElem
         return ExtFieldElem(ret);
     }
 
-    friend constexpr ExtFieldElem operator*(const ExtFieldElem& e1, const ExtFieldElem& e2) noexcept
+    [[gnu::always_inline]] friend constexpr ExtFieldElem operator*(
+        const ExtFieldElem& e1, const ExtFieldElem& e2) noexcept
     {
+        if constexpr (requires { sqr(e1); })  // Use sqr() if available.
+        {
+            if (&e1 == &e2)
+                return sqr(e1);
+        }
         return multiply(e1, e2);
     }
 
