@@ -4,21 +4,20 @@
 #pragma once
 
 #include <evmc/evmc.hpp>
+#include <nlohmann/json.hpp>
 #include <test/state/block.hpp>
 #include <test/state/bloom_filter.hpp>
 #include <test/state/transaction.hpp>
 #include <test/utils/blob_schedule.hpp>
+#include <test/utils/test_report.hpp>
 #include <test/utils/test_state.hpp>
 #include <test/utils/utils.hpp>
 #include <vector>
 
+namespace json = nlohmann;
+
 namespace evmone::test
 {
-struct UnsupportedTestFeature : std::runtime_error
-{
-    using runtime_error::runtime_error;
-};
-
 // https://ethereum.org/en/developers/docs/blocks/
 struct BlockHeader
 {
@@ -27,14 +26,14 @@ struct BlockHeader
     hash256 state_root;
     hash256 receipts_root;
     state::BloomFilter logs_bloom;
-    int64_t difficulty;
+    int64_t difficulty = 0;
     bytes32 prev_randao;
-    int64_t block_number;
-    int64_t gas_limit;
-    int64_t gas_used;
-    int64_t timestamp;
+    int64_t block_number = 0;
+    int64_t gas_limit = 0;
+    int64_t gas_used = 0;
+    int64_t timestamp = 0;
     bytes extra_data;
-    uint64_t base_fee_per_gas;
+    uint64_t base_fee_per_gas = 0;
     hash256 hash;
     hash256 transactions_root;
     hash256 withdrawal_root;
@@ -42,7 +41,8 @@ struct BlockHeader
     std::optional<uint64_t> blob_gas_used;
     std::optional<uint64_t> excess_blob_gas;
     hash256 requests_hash;
-    std::optional<uint64_t> slot_number;  ///< EIP-7843 — absent before Amsterdam.
+    std::optional<hash256> block_access_list_hash;  ///< Since EIP-7928.
+    std::optional<uint64_t> slot_number;            ///< Since EIP-7843.
 };
 
 struct TestBlock
@@ -77,4 +77,10 @@ struct BlockchainTest
 };
 
 std::vector<BlockchainTest> load_blockchain_tests(std::istream& input);
+
+/// Builds the test named @p name in a fixture file from its JSON value @p j.
+BlockchainTest make_blockchain_test(const std::string& name, const json::json& j);
+
+/// Execute the blockchain @p test using the @p vm, recording what does not match into @p report.
+void run_blockchain_test(const BlockchainTest& test, evmc::VM& vm, TestReport& report);
 }  // namespace evmone::test

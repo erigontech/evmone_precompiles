@@ -319,6 +319,7 @@ TestState from_json<TestState>(const json::json& j)
             o[from_json<address>(j_addr)] = {.nonce = from_json<uint64_t>(j_acc.at("nonce")),
                 .balance = from_json<intx::uint256>(j_acc.at("balance")),
                 .code = from_json<bytes>(j_acc.at("code"))};
+        acc.code_hash = keccak256(acc.code);
 
         if (const auto storage_it = j_acc.find("storage"); storage_it != j_acc.end())
         {
@@ -506,11 +507,14 @@ static void from_json(const json::json& j_t, StateTransitionTest& o)
 static void from_json(const json::json& j, std::vector<StateTransitionTest>& o)
 {
     for (const auto& elem_it : j.items())
-    {
-        auto test = elem_it.value().get<StateTransitionTest>();
-        test.name = elem_it.key();
-        o.emplace_back(std::move(test));
-    }
+        o.emplace_back(make_state_test(elem_it.key(), elem_it.value()));
+}
+
+StateTransitionTest make_state_test(const std::string& name, const json::json& j)
+{
+    auto test = j.get<StateTransitionTest>();
+    test.name = name;
+    return test;
 }
 
 std::vector<StateTransitionTest> load_state_tests(std::istream& input)

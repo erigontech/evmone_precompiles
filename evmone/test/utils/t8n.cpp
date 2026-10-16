@@ -115,8 +115,10 @@ void t8n(evmc::VM& vm, const T8NArgs& args)
             }
         }
 
+        // No block reward from Paris (EIP-3675). A reward of 0 would still touch the coinbase,
+        // which would then be read (EIP-7928).
         auto res = apply_block(state, vm, block, block_hashes, txs, rev, blob_gas_limit,
-            {.block_reward = args.block_reward,
+            {.block_reward = rev < EVMC_PARIS ? args.block_reward : std::nullopt,
                 .skip_system_calls = args.pre_state_only,
                 .open_trace = args.open_trace});
 
@@ -149,9 +151,14 @@ void t8n(evmc::VM& vm, const T8NArgs& args)
                 j_receipt["blockHash"] = hex0x(bytes32{});
                 j_receipt["contractAddress"] = hex0x(address{});
                 j_receipt["logsBloom"] = hex0x(receipt.logs_bloom_filter);
-                j_receipt["logs"] = JSON::array();  // FIXME: Add to_json<state:Log>
-                j_receipt["root"] = "";
-                j_receipt["status"] = "0x1";
+                auto& j_logs = j_receipt["logs"] = JSON::array();
+                for (const auto& log : receipt.logs)
+                    j_logs.push_back(to_json(log));
+                // A pre-Byzantium receipt is keyed on the post-state root instead of the
+                // EIP-658 status. Emit both, as go-ethereum does: the root takes precedence.
+                j_receipt["root"] =
+                    receipt.post_state.has_value() ? hex0x(*receipt.post_state) : "";
+                j_receipt["status"] = hex0x(uint64_t{receipt.status == EVMC_SUCCESS});
                 j_receipt["transactionIndex"] = hex0x(i);
                 transactions.emplace_back(std::move(txs[i]));
             }
@@ -164,15 +171,23 @@ void t8n(evmc::VM& vm, const T8NArgs& args)
             requests = std::move(res.requests);
 
         receipts = std::move(res.receipts);
-        // Block gas used reported as the cumulative transaction gas (refunds excluded),
-        // preserving the prior t8n output.
-        gas_used = receipts.empty() ? 0 : receipts.back().cumulative_gas_used;
+        gas_used = res.gas_used;
         bloom = res.bloom;
         blob_gas_left = res.blob_gas_left;
         post_state = std::move(res.block_state);
 
         j_result["logsHash"] = hex0x(logs_hash(txs_logs));
         j_result["stateRoot"] = hex0x(state::mpt_hash(post_state));
+
+        if (!args.pre_state_only && rev >= EVMC_AMSTERDAM)
+        {
+            j_result["blockAccessList"] = hex0x(res.block_access_list.rlp_encode());
+            j_result["blockAccessListHash"] = hex0x(res.block_access_list.hash());
+            // The requests are processed first, so their failure takes precedence.
+            if (!res.requests_error &&
+                res.block_access_list.exceeds_gas_limit(static_cast<uint64_t>(block.gas_limit)))
+                j_result["blockException"] = "BlockException.BLOCK_ACCESS_LIST_GAS_LIMIT_EXCEEDED";
+        }
     }
     else
         post_state = state;
